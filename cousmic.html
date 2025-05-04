@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Neural Network</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        .glass-panel {
+            backdrop-filter: blur(16px);
+            background-color: rgba(2, 6, 23, 0.7);
+        }
+        .neon-text {
+            text-shadow: 0 0 8px rgba(96, 165, 250, 0.8);
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        .node-connection {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100">
+    <div id="scene-container" class="absolute inset-0"></div>
+    
+    <!-- Floating info panel -->
+    <div class="absolute top-6 left-6 max-w-md glass-panel rounded-2xl border border-slate-800 p-6 shadow-2xl">
+        <h1 class="text-4xl font-bold mb-2 text-blue-400 neon-text">Cosmic Neural Network</h1>
+        <p class="text-slate-300 mb-4">Interactive visualization of a neural network learning cosmic patterns</p>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Network Depth</label>
+                <input id="network-depth" type="range" min="2" max="8" value="4" 
+                       class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                <div class="flex justify-between text-xs text-slate-400 mt-1">
+                    <span>Shallow</span>
+                    <span>Deep</span>
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Learning Rate</label>
+                <input id="learning-rate" type="range" min="1" max="100" value="50" 
+                       class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-purple-500">
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <button id="train-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-300 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                    </svg>
+                    Train Network
+                </button>
+                
+                <button id="reset-btn" class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition-all duration-300 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                    </svg>
+                    Reset
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Performance metrics -->
+    <div class="absolute bottom-6 right-6 w-80 glass-panel rounded-2xl border border-slate-800 p-4 shadow-2xl">
+        <h3 class="text-lg font-semibold text-blue-400 mb-2">Training Metrics</h3>
+        <div class="flex justify-between text-sm text-slate-300 mb-1">
+            <span>Loss: <span id="loss-value" class="font-mono">0.4278</span></span>
+            <span>Accuracy: <span id="accuracy-value" class="font-mono">78.5%</span></span>
+        </div>
+        <div class="h-40">
+            <canvas id="metrics-chart"></canvas>
+        </div>
+    </div>
+    
+    <!-- Floating nodes info -->
+    <div id="node-tooltip" class="absolute hidden glass-panel rounded-lg border border-slate-700 p-3 shadow-lg max-w-xs pointer-events-none transition-all duration-200">
+        <h4 class="font-bold text-blue-300 mb-1">Neuron <span id="node-id">0-0</span></h4>
+        <div class="text-xs space-y-1">
+            <div class="flex justify-between">
+                <span class="text-slate-400">Activation:</span>
+                <span id="node-activation" class="font-mono">0.784</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-slate-400">Bias:</span>
+                <span id="node-bias" class="font-mono">-0.142</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-slate-400">Connections:</span>
+                <span id="node-connections" class="font-mono">32</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Animated cosmic background with Three.js -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // ======================
+            // Three.js Cosmic Background
+            // ======================
+            const container = document.getElementById('scene-container');
+            const scene = new THREE.Scene();
+            
+            // Camera
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 30;
+            
+            // Renderer with special effects
+            const renderer = new THREE.WebGLRenderer({ 
+                antialias: true,
+                alpha: true
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+            
+            // Cosmic particles
+            const particleCount = 2000;
+            const particles = new THREE.BufferGeometry();
+            const particlePositions = new Float32Array(particleCount * 3);
+            const particleColors = new Float32Array(particleCount * 3);
+            const particleSizes = new Float32Array(particleCount);
+            
+            for (let i = 0; i < particleCount; i++) {
+                const i3 = i * 3;
+                
+                // Position particles in a spherical distribution
+                const radius = 50 * Math.random();
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                
+                particlePositions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+                particlePositions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                particlePositions[i3 + 2] = radius * Math.cos(phi);
+                
+                // Color particles with cosmic colors
+                particleColors[i3] = 0.1 + Math.random() * 0.3; // R
+                particleColors[i3 + 1] = 0.1 + Math.random() * 0.2; // G
+                particleColors[i3 + 2] = 0.3 + Math.random() * 0.5; // B
+                
+                particleSizes[i] = 0.5 + Math.random() * 2;
+            }
+            
+            particles.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+            particles.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+            particles.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+            
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 1.5,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                sizeAttenuation: true
+            });
+            
+            const particleSystem = new THREE.Points(particles, particleMaterial);
+            scene.add(particleSystem);
+            
+            // Cosmic fog
+            scene.fog = new THREE.FogExp2(0x020617, 0.002);
+            
+            // ======================
+            // Neural Network Visualization
+            // ======================
+            const networkContainer = document.createElement('div');
+            networkContainer.className = 'absolute inset-0 pointer-events-none';
+            document.body.appendChild(networkContainer);
+            
+            // Create SVG for connections
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute('class', 'node-connection w-full h-full');
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', '100%');
+            networkContainer.appendChild(svg);
+            
+            // Neural network state
+            let networkLayers = 4;
+            let neuronsPerLayer = [4, 8, 8, 4];
+            let neuronElements = [];
+            let connections = [];
+            let isTraining = false;
+            let trainingInterval;
+            
+            // Create neural network visualization
+            function createNetwork() {
+                // Clear existing network
+                neuronElements.forEach(el => el.remove());
+                neuronElements = [];
+                connections = [];
+                svg.innerHTML = '';
+                
+                const centerX = window.innerWidth / 2;
+                const centerY = window.innerHeight / 2;
+                const layerSpacing = window.innerWidth / (networkLayers + 1);
+                
+                // Create neurons
+                for (let layer = 0; layer < networkLayers; layer++) {
+                    const neuronsInLayer = neuronsPerLayer[layer];
+                    const neuronSize = Math.min(40, 200 / neuronsInLayer);
+                    
+                    for (let neuron = 0; neuron < neuronsInLayer; neuron++) {
+                        const x = centerX - (window.innerWidth * 0.4) + (layer * layerSpacing);
+                        const y = centerY - (neuronsInLayer * neuronSize / 2) + (neuron * neuronSize);
+                        
+                        const neuronEl = document.createElement('div');
+                        neuronEl.className = `absolute rounded-full border-2 border-blue-400 bg-slate-900 flex items-center justify-center text-xs font-mono text-blue-300 cursor-pointer transition-all duration-300 hover:scale-125 hover:bg-blue-900/30 hover:shadow-lg hover:shadow-blue-500/20 pulse`;
+                        neuronEl.style.width = `${neuronSize}px`;
+                        neuronEl.style.height = `${neuronSize}px`;
+                        neuronEl.style.left = `${x}px`;
+                        neuronEl.style.top = `${y}px`;
+                        
+                        // Store layer and neuron index
+                        neuronEl.dataset.layer = layer;
+                        neuronEl.dataset.neuron = neuron;
+                        
+                        // Add activation value
+                        const activation = (Math.random() * 0.8 + 0.2).toFixed(3);
+                        neuronEl.textContent = activation;
+                        neuronEl.dataset.activation = activation;
+                        
+                        // Add hover effect
+                        neuronEl.addEventListener('mouseenter', showNeuronInfo);
+                        neuronEl.addEventListener('mouseleave', hideNeuronInfo);
+                        
+                        networkContainer.appendChild(neuronEl);
+                        neuronElements.push(neuronEl);
+                    }
+                }
+                
+                // Create connections
+                for (let layer = 0; layer < networkLayers - 1; layer++) {
+                    const currentLayerNeurons = neuronElements.filter(el => parseInt(el.dataset.layer) === layer);
+                    const nextLayerNeurons = neuronElements.filter(el => parseInt(el.dataset.layer) === layer + 1);
+                    
+                    currentLayerNeurons.forEach(source => {
+                        nextLayerNeurons.forEach(target => {
+                            // Create SVG line
+                            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            const weight = (Math.random() * 2 - 1).toFixed(2);
+                            const opacity = Math.abs(weight) * 0.3 + 0.1;
+                            
+                            updateConnectionLine(line, source, target, weight);
+                            
+                            line.setAttribute('stroke', weight > 0 ? '#60a5fa' : '#f472b6');
+                            line.setAttribute('stroke-width', Math.abs(weight) * 2);
+                            line.setAttribute('opacity', opacity);
+                            line.setAttribute('class', 'connection transition-all duration-500');
+                            
+                            svg.appendChild(line);
+                            connections.push({
+                                element: line,
+                                source: source,
+                                target: target,
+                                weight: weight
+                            });
+                        });
+                    });
+                }
+            }
+            
+            // Update connection line positions
+            function updateConnectionLine(line, source, target, weight) {
+                const sourceRect = source.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                
+                const x1 = sourceRect.left + sourceRect.width / 2;
+                const y1 = sourceRect.top + sourceRect.height / 2;
+                const x2 = targetRect.left + targetRect.width / 2;
+                const y2 = targetRect.top + targetRect.height / 2;
+                
+                line.setAttribute('x1', x1);
+                line.setAttribute('y1', y1);
+                line.setAttribute('x2', x2);
+                line.setAttribute('y2', y2);
+                
+                // Animate based on weight
+                if (weight > 0) {
+                    line.setAttribute('stroke', `rgba(96, 165, 250, ${Math.abs(weight) * 0.5 + 0.1})`);
+                } else {
+                    line.setAttribute('stroke', `rgba(244, 114, 182, ${Math.abs(weight) * 0.5 + 0.1})`);
+                }
+                
+                line.setAttribute('stroke-width', Math.abs(weight) * 3);
+            }
+            
+            // Show neuron info tooltip
+            function showNeuronInfo(event) {
+                const neuron = event.target;
+                const tooltip = document.getElementById('node-tooltip');
+                
+                tooltip.querySelector('#node-id').textContent = `${neuron.dataset.layer}-${neuron.dataset.neuron}`;
+                tooltip.querySelector('#node-activation').textContent = neuron.dataset.activation;
+                tooltip.querySelector('#node-bias').textContent = (Math.random() * 2 - 1).toFixed(3);
+                
+                // Count connections
+                const layer = parseInt(neuron.dataset.layer);
+                const isInput = layer === 0;
+                const isOutput = layer === networkLayers - 1;
+                
+                let connectionCount;
+                if (isInput) {
+                    connectionCount = neuronsPerLayer[1];
+                } else if (isOutput) {
+                    connectionCount = neuronsPerLayer[networkLayers - 2];
+                } else {
+                    connectionCount = neuronsPerLayer[layer + 1];
+                }
+                
+                tooltip.querySelector('#node-connections').textContent = connectionCount;
+                
+                // Position tooltip
+                tooltip.style.left = `${neuron.getBoundingClientRect().right + 10}px`;
+                tooltip.style.top = `${neuron.getBoundingClientRect().top}px`;
+                tooltip.style.display = 'block';
+            }
+            
+            function hideNeuronInfo() {
+                document.getElementById('node-tooltip').style.display = 'none';
+            }
+            
+            // Simulate training
+            function startTraining() {
+                if (isTraining) return;
+                
+                isTraining = true;
+                document.getElementById('train-btn').classList.add('bg-purple-600', 'animate-pulse');
+                
+                // Update metrics chart
+                updateMetricsChart();
+                
+                trainingInterval = setInterval(() => {
+                    // Animate neurons
+                    neuronElements.forEach(neuron => {
+                        const newActivation = Math.min(1, Math.max(0, 
+                            parseFloat(neuron.dataset.activation) + (Math.random() * 0.2 - 0.1)
+                        )).toFixed(3);
+                        
+                        neuron.dataset.activation = newActivation;
+                        neuron.textContent = newActivation;
+                        
+                        // Add glow effect
+                        const intensity = parseFloat(newActivation) * 100;
+                        neuron.style.boxShadow = `0 0 ${intensity}px rgba(96, 165, 250, ${newActivation * 0.5})`;
+                    });
+                    
+                    // Animate connections
+                    connections.forEach(conn => {
+                        const newWeight = Math.min(1, Math.max(-1, 
+                            parseFloat(conn.weight) + (Math.random() * 0.4 - 0.2)
+                        )).toFixed(2);
+                        
+                        conn.weight = newWeight;
+                        updateConnectionLine(conn.element, conn.source, conn.target, newWeight);
+                    });
+                    
+                    // Update metrics
+                    const loss = (Math.random() * 0.1).toFixed(4);
+                    const accuracy = (95 - Math.random() * 10).toFixed(1);
+                    
+                    document.getElementById('loss-value').textContent = loss;
+                    document.getElementById('accuracy-value').textContent = `${accuracy}%`;
+                    
+                    updateMetricsChart(loss, accuracy);
+                    
+                }, 300);
+            }
+            
+            function stopTraining() {
+                clearInterval(trainingInterval);
+                isTraining = false;
+                document.getElementById('train-btn').classList.remove('bg-purple-600', 'animate-pulse');
+            }
+            
+            // ======================
+            // Metrics Chart
+            // ======================
+            const metricsCtx = document.getElementById('metrics-chart').getContext('2d');
+            const metricsChart = new Chart(metricsCtx, {
+                type: 'line',
+                data: {
+                    labels: Array(20).fill(''),
+                    datasets: [
+                        {
+                            label: 'Loss',
+                            data: Array(20).fill(0.5),
+                            borderColor: '#f472b6',
+                            backgroundColor: 'rgba(244, 114, 182, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Accuracy',
+                            data: Array(20).fill(50),
+                            borderColor: '#60a5fa',
+                            backgroundColor: 'rgba(96, 165, 250, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1,
+                            grid: {
+                                color: 'rgba(71, 85, 105, 0.2)'
+                            },
+                            ticks: {
+                                color: '#64748b'
+                            }
+                        },
+                        y1: {
+                            position: 'right',
+                            beginAtZero: true,
+                            max: 100,
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                            ticks: {
+                                color: '#64748b'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                }
+            });
+            
+            function updateMetricsChart(loss, accuracy) {
+                // Shift all data left
+                metricsChart.data.datasets[0].data.shift();
+                metricsChart.data.datasets[1].data.shift();
+                
+                // Add new data
+                metricsChart.data.datasets[0].data.push(loss || Math.random() * 0.5 + 0.1);
+                metricsChart.data.datasets[1].data.push(accuracy || Math.random() * 30 + 60);
+                
+                metricsChart.update();
+            }
+            
+            // ======================
+            // Event Listeners
+            // ======================
+            document.getElementById('network-depth').addEventListener('input', (e) => {
+                networkLayers = parseInt(e.target.value);
+                neuronsPerLayer = Array(networkLayers).fill(0).map((_, i) => {
+                    // Create a pyramid shape (more neurons in middle layers)
+                    const middle = Math.floor(networkLayers / 2);
+                    const distance = Math.abs(i - middle);
+                    return 4 + (middle - distance) * 2;
+                });
+                createNetwork();
+            });
+            
+            document.getElementById('train-btn').addEventListener('click', () => {
+                if (isTraining) {
+                    stopTraining();
+                } else {
+                    startTraining();
+                }
+            });
+            
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                stopTraining();
+                createNetwork();
+            });
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                createNetwork();
+            });
+            
+            // Animation loop for Three.js
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                // Rotate particles slowly
+                particleSystem.rotation.x += 0.0005;
+                particleSystem.rotation.y += 0.001;
+                
+                renderer.render(scene, camera);
+            }
+            
+            // Initialize everything
+            createNetwork();
+            animate();
+        });
+    </script>
+</body>
+</html>
